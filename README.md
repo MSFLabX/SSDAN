@@ -9,11 +9,11 @@ Our model are trained on a NVIDIA A800-SXM4-80GB GPU.
 
 ## 👉 Data
 We conduct experiments on three publicly available datasets and use a data simulation strategy to generate training and test image pairs.
-* [Cave](https://hyperspectral.ee.uh.edu/)
+* [Cave](https://cave.cs.columbia.edu/repository/Multispectral)
 
-* [Harvard](https://github.com/GatorSense/MUUFLGulfport/)
+* [Harvard](http://vision.seas.harvard.edu/hyperspec/)
 
-* [KAIST](https://github.com/danfenghong/IEEE_GRSL_EndNet/blob/master/README.md)
+* [KAIST](https://vclab.kaist.ac.kr/siggraphasia2017p1/))
 
 ## 🌈 Results
 
@@ -40,4 +40,6 @@ To get started, we recommend setting up a conda environment and installing depen
 
 ### Citation
 If this code is useful for your research, please cite this paper.
+    
+    Update later
 
