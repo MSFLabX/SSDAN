@@ -6,7 +6,7 @@ from calculate_metrics import Loss_SAM, Loss_RMSE, Loss_PSNR, Loss_SSIM, Loss_ER
 from thop import profile, clever_format
 from CaveDataset import CaveDataset
 from utils import *
-from model_v189 import Net
+from SSDAN import Net
 from utils import make_dir
 from scipy.io import loadmat
 from torch import nn
@@ -29,9 +29,9 @@ if __name__ == '__main__':
     # exit(0)
     fe = open('cfg.yaml')
     cfg = yaml.safe_load(fe)
-    save_train_path = '../Checkpoint/model/v189/train/v2'
-    save_test_path = '../Checkpoint/model/v189/test/v2'
-    record_path = '../record/model/v189/v2'
+    save_train_path = '../Checkpoint/model/SSDAN/train'
+    save_test_path = '../Checkpoint/model/SSDAN/test'
+    record_path = '../record/model/SSDAN'
     train_path = '../GS/DSPNet/Data/CAVE/Train/HSI'
     test_path = '../GS/DSPNet/Data/CAVE/Test/HSI'
     train_filename_list = get_filename_list(train_path)
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     if start_epoch > 0:
         print('resuming by loading epoch %04d' % start_epoch)
-        config_parameter = torch.load(os.path.join("../Checkpoint/model/v189/train/v2", 'model_%04d.pth' % start_epoch))
+        config_parameter = torch.load(os.path.join("../Checkpoint/model/SSDAN/train", 'model_%04d.pth' % start_epoch))
         model.load_state_dict(config_parameter['net_parameter'])
         optimizer.load_state_dict(config_parameter['optimizer_parameter'])
         scheduler.load_state_dict(config_parameter['scheduler_parameter'])
