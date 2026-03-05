@@ -13,7 +13,7 @@ We conduct experiments on three publicly available datasets and use a data simul
 
 * [Harvard](http://vision.seas.harvard.edu/hyperspec/)
 
-* [KAIST](https://vclab.kaist.ac.kr/siggraphasia2017p1/))
+* [KAIST](https://vclab.kaist.ac.kr/siggraphasia2017p1/)
 
 ## 🌈 Results
 
