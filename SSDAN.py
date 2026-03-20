@@ -51,6 +51,40 @@ class WithBias_LayerNorm(nn.Module):
         sigma = x.var(-1, keepdim=True, unbiased=False)
         return (x - mu) / torch.sqrt(sigma + 1e-5) * self.weight + self.bias
 
+class eca_layer_1d(nn.Module):
+    """Constructs a ECA module.
+    Args:
+        channel: Number of channels of the input feature map
+        k_size: Adaptive selection of kernel size
+    """
+
+    def __init__(self, channel, k_size=3):
+        super(eca_layer_1d, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+        self.channel = channel
+        self.k_size = k_size
+
+    def forward(self, x):
+        # b hw c
+        # feature descriptor on the global spatial information
+        y = self.avg_pool(x.transpose(-1, -2))
+
+        # Two different branches of ECA module
+        y = self.conv(y.transpose(-1, -2))
+
+        # Multi-scale information fusion
+        y = self.sigmoid(y)
+
+        return x * y.expand_as(x)
+
+    def flops(self):
+        flops = 0
+        flops += self.channel * self.channel * self.k_size
+
+        return flops
+
 
 class LayerNorm(nn.Module):
     def __init__(self, dim, LayerNorm_type):
