@@ -41,5 +41,14 @@ To get started, we recommend setting up a conda environment and installing depen
 ### Citation
 If this code is useful for your research, please cite this paper.
     
-    Update later
+    @ARTICLE{11422970,
+      author={Song, Qiya and Guo, Shuo and Yang, Tao and Sun, Bin and Dian, Renwei and Li, Shutao},
+      journal={IEEE Transactions on Geoscience and Remote Sensing}, 
+      title={S2-Differential Feature Awareness Network for Hyperspectral Image Fusion}, 
+      year={2026},
+      volume={64},
+      number={},
+      pages={1-10},
+      keywords={Frequency-domain analysis;Fourier transforms;Hyperspectral imaging;Transformers;Image reconstruction;Spatial resolution;Optimization;Distortion;Correlation;Convolutional neural networks;Differential feature;frequency;hyperspectral image (HSI);texture structure},
+      doi={10.1109/TGRS.2026.3671284}}
 
