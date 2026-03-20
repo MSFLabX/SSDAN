@@ -63,105 +63,8 @@ class LayerNorm(nn.Module):
     def forward(self, x):
         h, w = x.shape[-2:]
         return to_4d(self.body(to_3d(x)), h, w)
-class Attention1(nn.Module):
-    def __init__(self, dim, num_heads, bias):
-        super(Attention1, self).__init__()
-        self.num_heads = num_heads
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
 
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
-        self.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, stride=1, padding=1, groups=dim * 3, bias=bias)
-        self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
 
-    def forward(self, x):
-        b, c, h, w = x.shape
-
-        qkv = self.qkv_dwconv(self.qkv(x))
-        q, k, v = qkv.chunk(3, dim=1)
-
-        q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v = rearrange(v, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-
-        q = torch.nn.functional.normalize(q, dim=-1)
-        k = torch.nn.functional.normalize(k, dim=-1)
-
-        return k, q, v
-class Attention2(nn.Module):
-    def __init__(self, dim, num_heads, bias):
-        super(Attention2, self).__init__()
-        self.num_heads = num_heads
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
-
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
-        self.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, stride=1, padding=1, groups=dim * 3, bias=bias)
-        self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
-
-    def forward(self, x, q, k, v):
-        b, c, h, w = x.shape
-
-        attn = (q @ k.transpose(-2, -1)) * self.temperature
-        attn = attn.softmax(dim=-1)
-
-        out = (attn @ v)
-
-        out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=h, w=w)
-
-        out = self.project_out(out)
-        return out
-class Attention3(nn.Module):
-    def __init__(self, dim, num_heads, bias):
-        super(Attention3, self).__init__()
-        self.num_heads = num_heads
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
-
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
-        self.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, stride=1, padding=1, groups=dim * 3, bias=bias)
-        self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
-
-    def forward(self, x, q, k, v):
-        b, c, h, w = x.shape
-
-        attn = torch.matmul(q / self.temperature, k.transpose(-2, -1))
-
-        # Normalization (SoftMax)
-        attn = F.softmax(attn, dim=-1)
-
-            # Attention output
-        output = torch.matmul(attn, v)
-
-            # Reshape output to original format
-        output = output.view(b, c, h, w)
-        return output
-class TransformerBlock1(nn.Module):
-    def __init__(self, dim, num_heads, ffn_expansion_factor, bias, LayerNorm_type):
-        super(TransformerBlock1, self).__init__()
-
-        self.norm1 = LayerNorm(dim, LayerNorm_type)
-        self.attn = Attention(dim, num_heads, bias)
-        self.attn1 = Attention1(dim, num_heads, bias)
-        self.attn2 = Attention2(dim, num_heads, bias)
-        self.attn3 = Attention3(dim, num_heads, bias)
-        self.norm2 = LayerNorm(dim, LayerNorm_type)
-        self.ffn = FeedForward(dim, ffn_expansion_factor, bias)
-
-    def forward(self, xx):
-        x, y = xx[0], xx[1]
-        #x = x + self.attn(self.norm1(x))
-        #x = x + self.ffn(self.norm2(x))
-        x_k, x_q, x_v = self.attn1(self.norm1(x))
-
-        #y = y + self.attn(self.norm1(y))
-        #y = y + self.ffn(self.norm2(y))
-        y_k, y_q, y_v = self.attn1(self.norm1(y))
-
-        x = x + self.attn2(x, y_k, x_q, y_v)
-        x = x + self.ffn(self.norm2(x))
-
-        y = y + self.attn3(y, x_k, y_q, x_v)
-        y = y + self.ffn(self.norm2(y))
-
-        return x, y
 class eca_layer_1d(nn.Module):
     """Constructs a ECA module.
     Args:
@@ -289,23 +192,6 @@ class Attention_spatio(nn.Module):
         output = output.view(b, c, h, w)
         return output
 
-##########################################################################
-class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, ffn_expansion_factor, bias, LayerNorm_type):
-        super(TransformerBlock, self).__init__()
-
-        self.norm1 = LayerNorm(dim, LayerNorm_type)
-        self.attn = Attention(dim, num_heads, bias)
-        self.attnspa = Attention_spatio(dim, num_heads, bias)
-        self.norm2 = LayerNorm(dim, LayerNorm_type)
-        self.ffn = FeedForward(dim, ffn_expansion_factor)
-
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))
-        x = x + self.ffn(self.norm2(x))
-
-        return x
-
 
 ##########################################################################
 ## Overlapped image patch embedding with 3x3 Conv
@@ -369,48 +255,6 @@ class BasicConv(nn.Module):
     def forward(self, x):
         return self.main(x)
 
-import torch.fft
-from torchvision.models import ResNet
-class ResBlock_fft_bench(nn.Module):
-    def __init__(self, n_feat, norm='backward'): # 'ortho'
-        super(ResBlock_fft_bench, self).__init__()
-        self.main = nn.Sequential(
-            BasicConv(n_feat, n_feat, kernel_size=3, stride=1, relu=True),
-            BasicConv(n_feat, n_feat, kernel_size=3, stride=1, relu=False)
-        )
-        self.main_fft = nn.Sequential(
-            BasicConv(n_feat*2, n_feat*2, kernel_size=1, stride=1, relu=True),
-            BasicConv(n_feat*2, n_feat*2, kernel_size=1, stride=1, relu=False)
-        )
-        self.dim = n_feat
-        self.norm = norm
-        planes = n_feat
-        self.planes = planes
-    def forward(self, x):
-        _, _, H, W = x.shape
-        dim = 1
-        y = torch.fft.fftn(x, norm=self.norm)
-        y_imag = y.imag
-        y_real = y.real
-        y_f = torch.cat([y_real, y_imag], dim=dim)
-        y = self.main_fft(y_f)
-        y_real, y_imag = torch.chunk(y, 2, dim=dim)
-        y = torch.complex(y_real, y_imag)
-        y = torch.fft.irfftn(y, s=(H, W), norm=self.norm)
-
-        #out = self.att(x)
-       # return self.main(x)*out + x + y
-        return self.main(x) + x
-class ResBlock(nn.Module):
-    def __init__(self, out_channel):
-        super(ResBlock, self).__init__()
-        self.main = nn.Sequential(
-            BasicConv(out_channel, out_channel, kernel_size=3, stride=1, relu=True, norm=False),
-            BasicConv(out_channel, out_channel, kernel_size=3, stride=1, relu=False, norm=False)
-        )
-
-    def forward(self, x):
-        return self.main(x) + x
 
 class SSRB(nn.Module):
     def __init__(self, dim, window_size=(8, 8), dim_head=28, heads=1):
@@ -677,7 +521,6 @@ class STFreprocess(nn.Module):
                                        nn.Conv2d(8 * channels, channels, 1, 1, 0), nn.LeakyReLU(0.1, inplace=False),
                                        nn.Conv2d(channels, channels, 1, 1, 0))
 
-        # self.fshif = nn.Conv2d(2 * channels, channels, 3, 1, 1)
 
         self.post = nn.Conv2d(channels, channels, 1, 1, 0)
 
@@ -687,14 +530,7 @@ class STFreprocess(nn.Module):
         # s2 = 42
         s1 = H // 3
         s2 = W // 3 * 2 + 1
-        # s1 = H // 2
-        # s2 = W // 2
-        # split
-        # msfa = msf[:, :, :s1+s2, :s1+s2]
-        # msfb = msf[:, :, :s1+s2, s1:]
-        # msfc = msf[:, :, s1:, :s1+s2]
-        # msfd = msf[:, :, s1:, s1:]
-        # msf_list = [msfa, msfb, msfc, msfd]
+
 
         msfa = msf[:, :, :s2, :s2]
         msfb = msf[:, :, :s2, s1:]
@@ -702,17 +538,7 @@ class STFreprocess(nn.Module):
         msfd = msf[:, :, s1:, s1:]
         msf_list = [msfa, msfb, msfc, msfd]
 
-        # msfa = msf[:, :, :s1, :s2]
-        # msfb = msf[:, :, :s1, s2:]
-        # msfc = msf[:, :, s1:, :s2]
-        # msfd = msf[:, :, s1:, s2:]
-        # msf_list = [msfa, msfb, msfc, msfd]
 
-        # panfa = panf[:, :, :s1+s2, :s1+s2]
-        # panfb = panf[:, :, :s1+s2, s1:]
-        # panfc = panf[:, :, s1:, :s1+s2]
-        # panfd = panf[:, :, s1:, s1:]
-        # panf_list = [panfa, panfb, panfc, panfd]
 
         panfa = panf[:, :, :s2, :s2]
         panfb = panf[:, :, :s2, s1:]
@@ -720,12 +546,6 @@ class STFreprocess(nn.Module):
         panfd = panf[:, :, s1:, s1:]
         panf_list = [panfa, panfb, panfc, panfd]
 
-
-        # panfa = panf[:, :, :s1, :s2]
-        # panfb = panf[:, :, :s1, s2:]
-        # panfc = panf[:, :, s1:, :s2]
-        # panfd = panf[:, :, s1:, s2:]
-        # panf_list = [panfa, panfb, panfc, panfd]
 
         qH = H // 4
         qW = W // 4
@@ -755,46 +575,19 @@ class STFreprocess(nn.Module):
             real = amp_fuse * torch.cos(pha_fuse) + 1e-8
             imag = amp_fuse * torch.sin(pha_fuse) + 1e-8
             out_list[i] = torch.complex(real, imag) + 1e-8
-            # print(out_list[i].shape)
-            # h = out_list[i].shape[-2]
-            # w = out_list[i].shape[-1]
+  
             out_list[i] = torch.abs(torch.fft.irfft2(out_list[i], s=(h, w), norm='backward'))
-            # print(out_list[i].shape)
-        # print(out_list[0].shape)
-        # print(out_list[0][:, :, :s1, :s1].shape)
-        # print(out_list[0][:, :, :s1, s1:].shape)
-        # print(out_list[1][:, :, :s1, :s2 - s1 - 1].shape)
-        # print(out_list[1][:, :, :s1, s2 - s1 - 1:].shape)
 
-        # print(out_list[0].shape)
-        # print(out_list[1].shape)
-        # print(out_list[2].shape)
-        # print(out_list[3].shape)
-        #
-        # print(out_list[0][:, :, :s1, :s1].shape)
-        # print(out_list[0][:, :, :s1, s1:].shape)
-        # print(out_list[1][:, :, :s1, :s2 - s1 - 1].shape)
 
         outup = torch.cat((out_list[0][:, :, :s1, :s1],
                            (out_list[0][:, :, :s1, s1:] + out_list[1][:, :, :s1, :s2 - s1]) / 2,
                            out_list[1][:, :, :s1, s2 - s1:]
                            ), dim=-1)
-        # print(outup.shape)
-        # print(out_list[0][:, :, s1:s2, :s1].shape)
-        # print(out_list[2][:, :, :s2 - s1, :s1].shape)
-        # print(out_list[0][:, :, s1:s2, s1:].shape)
-        # print(out_list[1][:, :, s1:s2, :s2 - s1].shape)
-        # print(out_list[2][:, :,:s2 - s1, s1:].shape)
-        # print(out_list[3][:,:,:s2 - s1,:s2 - s1].shape)
-        # print(out_list[1][:, :, s1:s2, s2-s1:].shape)
-        # print(out_list[3][:, :, :s2-s1, s2-s1:].shape)
+
         outmid = torch.cat(((out_list[0][:, :, s1:s2, :s1] + out_list[2][:, :, :s2 - s1, :s1]) / 2,
                             (out_list[0][:, :, s1:s2, s1:] + out_list[1][:, :, s1:s2, :s2 - s1] + out_list[2][:, :,:s2 - s1, s1:] + out_list[3][:,:,:s2 - s1,:s2 - s1]) / 4,
                             (out_list[1][:, :, s1:s2, s2-s1:] + out_list[3][:, :, :s2-s1, s2-s1:]) / 2), dim=-1)
-        # print(outmid.shape)
-        # print(out_list[2][:, :, s2 - s1:, :s1].shape)
-        # print(out_list[2][:, :, s2 - s1:, s1:].shape)
-        # print(out_list[3][:, :, s2 - s1:, :s2 - s1].shape)
+
         outdown = torch.cat((out_list[2][:, :, s2 - s1:, :s1],
                              (out_list[2][:, :, s2 - s1:, s1:] + out_list[3][:, :, s2 - s1:, :s2 - s1]) / 2,
                              out_list[3][:, :, s2-s1:, s2 - s1:]
@@ -818,185 +611,9 @@ def mean_channels(F):
     return spatial_sum / (F.size(2) * F.size(3))
 
 
-class ConvCrossAttention(nn.Module):
-    """
-    使用卷积生成QKV的跨注意力机制
-
-    Args:
-        dim: 输入特征维度
-        num_heads: 注意力头的数量
-        kernel_size: 卷积核大小，用于生成QKV
-        padding: 卷积填充
-    """
-
-    def __init__(self, dim, num_heads=1, kernel_size=1, padding=0):
-        super().__init__()
-        self.dim = dim
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-
-        assert self.head_dim * num_heads == dim, "dim must be divisible by num_heads"
-
-        # 使用卷积层生成Q、K、V
-        self.q_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=padding)
-        self.k_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=padding)
-        self.v_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=padding)
-
-        # 输出投影
-        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
-
-    def forward(self, x, context):
-        """
-        前向传播
-
-        Args:
-            x: 输入特征，形状为 (batch_size, dim, height, width)
-            context: 上下文特征，形状为 (batch_size, dim, context_height, context_width)
-
-        Returns:
-            注意力输出，形状为 (batch_size, dim, height, width)
-        """
-        batch_size, _, height, width = x.shape
-        _, _, context_height, context_width = context.shape
-
-        # 生成Q、K、V
-        # Q来自输入x，K和V来自上下文context
-        q = self.q_conv(x)  # (batch_size, dim, height, width)
-        k = self.k_conv(context)  # (batch_size, dim, context_height, context_width)
-        v = self.v_conv(context)  # (batch_size, dim, context_height, context_width)
-
-        # 重塑为多头注意力形式
-        # Q: (batch_size, num_heads, head_dim, height, width)
-        q = q.view(batch_size, self.num_heads, self.head_dim, height, width)
-        # K: (batch_size, num_heads, head_dim, context_height, context_width)
-        k = k.view(batch_size, self.num_heads, self.head_dim, context_height, context_width)
-        # V: (batch_size, num_heads, head_dim, context_height, context_width)
-        v = v.view(batch_size, self.num_heads, self.head_dim, context_height, context_width)
-
-        # 转换维度以便计算注意力
-        # Q: (batch_size, num_heads, height*width, head_dim)
-        q = q.permute(0, 1, 3, 4, 2).contiguous().view(batch_size, self.num_heads, height * width, self.head_dim)
-        # K: (batch_size, num_heads, head_dim, context_height*context_width)
-        k = k.permute(0, 1, 3, 4, 2).contiguous().view(batch_size, self.num_heads, context_height * context_width,
-                                                       self.head_dim).transpose(-2, -1)
-        # V: (batch_size, num_heads, context_height*context_width, head_dim)
-        v = v.permute(0, 1, 3, 4, 2).contiguous().view(batch_size, self.num_heads, context_height * context_width,
-                                                       self.head_dim)
-
-        # 计算注意力分数
-        # attn_scores: (batch_size, num_heads, height*width, context_height*context_width)
-        attn_scores = torch.matmul(q, k) / (self.head_dim ** 0.5)
-        attn_probs = F.softmax(attn_scores, dim=-1)
-
-        # 应用注意力权重到V
-        # output: (batch_size, num_heads, height*width, head_dim)
-        output = torch.matmul(attn_probs, v)
-
-        # 重塑回原来的形状
-        # output: (batch_size, dim, height, width)
-        output = output.view(batch_size, self.num_heads, height, width, self.head_dim)
-        output = output.permute(0, 1, 4, 2, 3).contiguous().view(batch_size, self.dim, height, width)
-
-        # 输出投影
-        output = self.out_proj(output)
-
-        return output
-
-
-def pixel_cosine_similarity(img1, img2):
-    """
-    通道数对齐（C1=C2）时，计算批次图像的像素余弦相似度
-
-    参数:
-        img1: 张量，形状为 (B, C, H1, W1)
-        img2: 张量，形状为 (B, C, H2, W2) （C与img1相同）
-
-    返回:
-        sim_matrix: 余弦相似度矩阵，形状为 (B, H1*W1, H2*W2)
-    """
-    B, C, H1, W1 = img1.shape
-    B2, C2, H2, W2 = img2.shape
-    # 验证批次大小和通道数是否一致
-    assert B == B2, "批次大小必须相同"
-    assert C == C2, "通道数必须对齐（C1=C2）"
-
-    # 1. 展平像素：(B, C, H, W) → (B, H*W, C)
-    # 转置为(B, H, W, C)后展平空间维度
-    img1_pixels = img1.permute(0, 2, 3, 1).reshape(B, -1, C)  # (B, N1, C)，N1=H1*W1
-    img2_pixels = img2.permute(0, 2, 3, 1).reshape(B, -1, C)  # (B, N2, C)，N2=H2*W2
-
-    # 2. L2归一化（沿通道维度）
-    img1_norm = torch.nn.functional.normalize(img1_pixels, p=2, dim=2)  # (B, N1, C)
-    img2_norm = torch.nn.functional.normalize(img2_pixels, p=2, dim=2)  # (B, N2, C)
-
-    # 3. 批量计算余弦相似度矩阵：(B, N1, C) × (B, C, N2) → (B, N1, N2)
-    sim_matrix = torch.bmm(img1_norm, img2_norm.transpose(1, 2))
-
-    return sim_matrix
-
 class SpaFreInterFusion(nn.Module):
     def __init__(self, channels):
         super(SpaFreInterFusion, self).__init__()
-
-        # self.spa_conv1 = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
-        # self.spa_up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        # self.spa_conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True)
-        # self.spa_pool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
-        # self.spa_conv3 = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
-        # self.spa_weight = nn.Sigmoid()
-        #
-        # self.spa_low = nn.Sequential(nn.Conv2d(channels, c
-        # hannels, kernel_size=3, padding=1, bias=True),
-        #                             nn.LeakyReLU(0.1),
-        #                             nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                             nn.LeakyReLU(0.1),
-        #                             nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                             nn.LeakyReLU(0.1))
-
-        # self.fre_conv1 = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
-        # self.fre_up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        # self.fre_conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True)
-        # self.fre_pool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
-        # self.fre_conv3 = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
-        # self.fre_weight = nn.Sigmoid()
-        #
-        # self.fre_low = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                              nn.LeakyReLU(0.1),
-        #                              nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                              nn.LeakyReLU(0.1),
-        #                              nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                              nn.LeakyReLU(0.1))
-
-        # self.spa_avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.spa_process = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                               nn.LeakyReLU(0.1),
-        #                               nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                               nn.Sigmoid())
-        #
-        # self.fre_avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.fre_process = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                                  nn.LeakyReLU(0.1),
-        #                                  nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                                  nn.Sigmoid())
-
-        # self.common_process = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                                         nn.LeakyReLU(0.1),
-        #                                         nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True))
-        # self.spa_score = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                                         nn.LeakyReLU(0.1),
-        #                                         nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True))
-        #
-        # self.fre_score = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
-        #                                         nn.LeakyReLU(0.1),
-        #                                         nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True))
-
-        # self.spa_fin_process = nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True)
-        #
-        # self.fre_fin_process = nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True)
-
-        # self.spa_get_fre = ConvCrossAttention(channels)
-        #
-        # self.fre_get_spa = ConvCrossAttention(channels)
 
         self.spa_preprocess = nn.Conv2d(channels, channels, 3, 1, 1)
         self.fre_preprocess = nn.Conv2d(channels, channels, 3, 1, 1)
@@ -1015,54 +632,10 @@ class SpaFreInterFusion(nn.Module):
                                     nn.ReLU(),
                                     nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
 
-        # self.spa_spe_diff_fusion = nn.Sequential(nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                          nn.ReLU(),
-        #                                          nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
-
         self.fre_spa_diff_fusion = nn.Sequential(nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True),
                                                  nn.ReLU(),
                                                  nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
 
-        # self.fre_spe_diff_fusion = nn.Sequential(nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                          nn.ReLU(),
-        #                                          nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
-        # self.spa_loc_process = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                         nn.LeakyReLU(0.1),
-        #                                         nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
-        #
-        # self.fre_loc_process = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                      nn.LeakyReLU(0.1),
-        #                                      nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
-
-        # self.raw_spa_spe_avg_agg = nn.AdaptiveAvgPool2d((1, 1))
-        # self.raw_spe_max_agg = nn.AdaptiveMaxPool2d((1, 1))
-
-        # self.spa_raw_spe_avg_agg = nn.AdaptiveAvgPool2d((1, 1))
-        # self.fre_spe_avg_agg = nn.AdaptiveAvgPool2d((1, 1))
-
-        # self.ada_weight_1 = nn.Parameter(
-        #     torch.randn(channels, 64, 64) * 0.1  # 随机初始化
-        # )
-        #
-        # self.ada_weight_2 = nn.Parameter(
-        #     torch.randn(channels, 32, 32) * 0.1  # 随机初始化
-        # )
-        #
-        # self.ada_weight_3 = nn.Parameter(
-        #     torch.randn(channels, 8, 8) * 0.1  # 随机初始化
-        # )
-        #
-        # self.ada_weight_4 = nn.Parameter(
-        #     torch.randn(channels, 64, 64) * 0.1  # 随机初始化
-        # )
-        #
-        # self.ada_weight_5 = nn.Parameter(
-        #     torch.randn(channels, 32, 32) * 0.1  # 随机初始化
-        # )
-        #
-        # self.ada_weight_6 = nn.Parameter(
-        #     torch.randn(channels, 8, 8) * 0.1  # 随机初始化
-        # )
 
     def channel_cosine_similarity(self, img1, img2):
         # 前文的通道维度余弦相似度计算函数
@@ -1107,16 +680,7 @@ class SpaFreInterFusion(nn.Module):
         fre_spe_channel_diff_weight = 1 - fre_spe_channel_weight
         fre_spe_diff = spe_raw * fre_spe_channel_diff_weight
 
-        # if H == 64:
-        #     spa_diff_spe = self.ada_weight_1 * (spe_raw - spa_1)
-        #     fre_diff_spe = self.ada_weight_4 * (spe_raw - fre_1)
-        # elif H == 32:
-        #     spa_diff_spe = self.ada_weight_2 * (spe_raw - spa_1)
-        #     fre_diff_spe = self.ada_weight_5 * (spe_raw - fre_1)
-        # else:
-        #     spa_diff_spe = self.ada_weight_3 * (spe_raw - spa_1)
-        #     fre_diff_spe = self.ada_weight_6 * (spe_raw - fre_1)
-
+    
         spa_fusion_1 = spa + spa_spe_diff
         spa_fusion_2 = self.spa_spa_diff_fusion(torch.cat([spa_fusion_1, spa_diff_spa], dim=1))
 
@@ -1168,9 +732,6 @@ class FrequencyAttentionModule(nn.Module):
         # 可学习的全局滤波器核
         # 局部分支的1x1卷积层
         self.local_branch = nn.Conv2d(in_channels, in_channels, kernel_size=1)
-        # 可学习的权重参数
-        # self.gamma1 = nn.Parameter(torch.ones(1))
-        # self.gamma2 = nn.Parameter(torch.ones(1))
 
     def forward(self, X):
         # 全局分支
@@ -1178,11 +739,6 @@ class FrequencyAttentionModule(nn.Module):
         h_g_X_K = high_pass_filter(g_X_K)
         F_global = inverse_fft(h_g_X_K)
 
-        # 局部分支
-        # F_local = self.local_branch(X)
-
-        # 合并全局和局部分支
-        # F_out = self.gamma1 * F_global + self.gamma2 * F_local
         return F_global
 
 class SpaFremid(nn.Module):
@@ -1193,10 +749,6 @@ class SpaFremid(nn.Module):
         # self.panpre = nn.Conv2d(channels, channels, 1, 1, 0)
         self.fre_process = Freprocess(channels)
         self.STfre_process = STFreprocess(channels)
-        # self.spa_att = nn.Sequential(nn.Conv2d(channels, channels // 2, kernel_size=3, padding=1, bias=True),
-        #                              nn.LeakyReLU(0.1),
-        #                              nn.Conv2d(channels // 2, channels, kernel_size=3, padding=1, bias=True),
-        #                              nn.Sigmoid())
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.contrast = stdv_channels
         self.cha_att1 = nn.Sequential(nn.Conv2d(channels, channels // 2, kernel_size=1, padding=0, bias=True),
@@ -1210,22 +762,6 @@ class SpaFremid(nn.Module):
         self.FT_ST_fusion = nn.Sequential(nn.Conv2d(channels * 2, channels * 2, kernel_size=3, padding=1, bias=True),
                                            nn.LeakyReLU(0.1),
                                            nn.Conv2d(channels * 2, channels, kernel_size=3, padding=1, bias=True))
-        # self.ST_to_FT = nn.Sequential(nn.Conv2d(channels, channels // 2, kernel_size=1, padding=0, bias=True),
-        #                               nn.LeakyReLU(0.1),
-        #                               nn.Conv2d(channels // 2, channels, kernel_size=1, padding=0, bias=True),
-        #                               nn.Sigmoid())
-        # self.FT_to_ST = nn.Sequential(nn.Conv2d(channels, channels // 2, kernel_size=1, padding=0, bias=True),
-        #                               nn.LeakyReLU(0.1),
-        #                               nn.Conv2d(channels // 2, channels, kernel_size=1, padding=0, bias=True),
-        #                               nn.Sigmoid())
-        # self.SPa_FT_pre_fusion = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                    nn.LeakyReLU(0.1),
-        #                                    nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                    nn.LeakyReLU(0.1),
-        #                                    nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
-        # self.FT_SPa_pre_fusion = nn.Sequential(nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-        #                                     nn.LeakyReLU(0.1),
-        #                                     nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True))
         self.FT_CF_pre_fusion = nn.Sequential(nn.Conv2d(2 * channels, 2 * channels, kernel_size=3, padding=1, bias=True),
                                               nn.LeakyReLU(0.1),
                                               nn.Conv2d(2 * channels, channels, kernel_size=3, padding=1, bias=True))
@@ -1249,8 +785,6 @@ class SpaFremid(nn.Module):
 
     # msst:全局频率融合后的输出  msft:局部频率融合后的输出  pan:全色特征图
     def forward(self, input):  # , i  实际输入是 msst msft
-        # msf = torch.cat([msst, msft], dim=1)
-        # MS PAN fusion
         msst = input[1]
         msft = input[0]
 
@@ -1269,14 +803,9 @@ class SpaFremid(nn.Module):
 
         FT_fused = self.FT_ST_fusion(torch.cat([STfuse, frefuse], dim=1))
 
-        # ST FT exchange information
-        # ms_SPa = spafuse + self.SPa_FT_pre_fusion(spafuse - FT_fused)
-        # 全局和局部融合相加
-        # ms_FT = FT_fused + self.FT_SPa_pre_fusion(FT_fused - spafuse)
 
         spa_out, fre_out = self.SpaFreInterFusion(spafuse, FT_fused, out_msi, out_hsi)
-        # ms_SPa = spafuse + self.SPa_FT_pre_fusion(fre_out)
-        # ms_FT = FT_fused + self.FT_SPa_pre_fusion(spa_out)
+
 
         # 空间和通道傅里叶融合
         ms_SPa = self.SPa_CF_pre_fusion(torch.cat([spa_out, panf_h], dim=1))
@@ -1331,9 +860,6 @@ class Net(nn.Module):
         self.Conv3_64 = nn.Conv2d(in_channels=3, out_channels=48, kernel_size=3, padding=(1, 1))
         self.Conv31_64 = nn.Conv2d(in_channels=31, out_channels=48, kernel_size=3, padding=(1, 1))
 
-        # self.Conv_msi1 = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=3, padding=(1, 1))
-        # self.Conv_msi2 = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=3, padding=(1, 1))
-        # self.Conv_msi3 = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=3, padding=(1, 1))
 
 
     # x:MSI, y:HSI
